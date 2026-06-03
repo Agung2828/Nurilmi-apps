@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Video;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class VideoController extends Controller
 {
@@ -38,11 +37,10 @@ class VideoController extends Controller
             'is_active'  => 'boolean',
         ];
 
-        // Validasi kondisional berdasarkan tipe video
         if ($videoType === 'youtube') {
             $rules['youtube_id'] = 'required|string|max:20';
         } else {
-            $rules['video_file'] = 'required|file|mimetypes:video/mp4,video/webm,video/ogg|max:204800'; // max 200MB
+            $rules['video_file'] = 'required|file|mimetypes:video/mp4,video/webm,video/ogg|max:204800';
         }
 
         $validated = $request->validate($rules);
@@ -63,9 +61,10 @@ class VideoController extends Controller
             $data['youtube_id'] = $validated['youtube_id'];
             $data['video_path'] = null;
         } else {
-            // Simpan file ke storage/app/public/videos/
-            $path = $request->file('video_file')->store('videos', 'public');
-            $data['video_path'] = $path;
+            // Simpan langsung ke public/storage/videos
+            $fileName = time() . '_' . $request->file('video_file')->getClientOriginalName();
+            $request->file('video_file')->move(public_path('storage/videos'), $fileName);
+            $data['video_path'] = 'videos/' . $fileName;
             $data['youtube_id'] = null;
         }
 
@@ -98,7 +97,6 @@ class VideoController extends Controller
         if ($videoType === 'youtube') {
             $rules['youtube_id'] = 'required|string|max:20';
         } else {
-            // File baru opsional saat edit (boleh tidak upload ulang)
             $rules['video_file'] = 'nullable|file|mimetypes:video/mp4,video/webm,video/ogg|max:204800';
         }
 
@@ -116,20 +114,21 @@ class VideoController extends Controller
         ];
 
         if ($videoType === 'youtube') {
-            // Ganti ke YouTube: hapus file lama jika ada
             if ($video->video_type === 'file' && $video->video_path) {
-                Storage::disk('public')->delete($video->video_path);
+                $oldFile = public_path('storage/' . $video->video_path);
+                if (file_exists($oldFile)) unlink($oldFile);
             }
             $data['youtube_id'] = $validated['youtube_id'];
             $data['video_path'] = null;
         } else {
-            // Tetap file
             if ($request->hasFile('video_file')) {
-                // Hapus file lama
                 if ($video->video_path) {
-                    Storage::disk('public')->delete($video->video_path);
+                    $oldFile = public_path('storage/' . $video->video_path);
+                    if (file_exists($oldFile)) unlink($oldFile);
                 }
-                $data['video_path'] = $request->file('video_file')->store('videos', 'public');
+                $fileName = time() . '_' . $request->file('video_file')->getClientOriginalName();
+                $request->file('video_file')->move(public_path('storage/videos'), $fileName);
+                $data['video_path'] = 'videos/' . $fileName;
             }
             $data['youtube_id'] = null;
         }
@@ -142,9 +141,9 @@ class VideoController extends Controller
 
     public function destroy(Video $video)
     {
-        // Hapus file fisik jika tipe file
         if ($video->video_type === 'file' && $video->video_path) {
-            Storage::disk('public')->delete($video->video_path);
+            $oldFile = public_path('storage/' . $video->video_path);
+            if (file_exists($oldFile)) unlink($oldFile);
         }
 
         $video->delete();
